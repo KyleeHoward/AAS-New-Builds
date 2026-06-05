@@ -1,11 +1,137 @@
+
 ---
-title: "aas-new-builds"
+title: "New Buildings"
+format: html
 ---
 
-This is a Quarto website.
-
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
+## Loading Libraries + Data
 
 ```{r}
-1 + 1
+#| label: setup
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(janitor)
 ```
+
+
+```{r}
+
+permits <- read_csv("data-raw/Issued_Construction_Permits_20260604.csv") 
+
+permits |> colnames()
+
+permits_clean <- permits |> clean_names(
+) |> 
+  filter(work_class == "New", permit_type_desc == "Building Permit") |> # I looked it up and multifamily housing is considered commerical!! no need to filter out
+  select(permit_type, permit_num, permit_class_mapped, permit_class, work_class, condominium, project_name, description, tcad_id, issued_date,calendar_year_issued, fiscal_year_issued, status_current, expires_date, completed_date, housing_units,number_of_floors, total_job_valuation, original_zip, council_district, jurisdiction, link, project_id, master_permit_num,contractor_company_name,contractor_phone,contractor_zip, applicant_organization, applicant_phone, certificate_of_occupancy, original_address_1) |>  # KH: just grabbed the ones that seemed important
+  filter(calendar_year_issued >= 1996) ## grabbing only thirty fifty years
+
+```
+
+## Determining Permit Class
+
+Now, I need to grab only the permits associated with housing. I already filtered out for only new building permits. 
+
+From the Open Data Portal. I can determine that the following clases are housing. 
+
+COMMERICAL PERMITS (KH: Need to double check with city)
+C- 101 Single Family Houses
+C- 103 Two Family Bldgs
+C- 104 Three & Four Family Bldgs
+C- 105 Five or More Family Bldgs
+C- 106 Mixed use 
+
+RESIDENTIAL PERMITS (KH: grabbing these because housing stock doesn't always have to be commerical!)
+R- 101 Single Family Houses
+R- 102 Secondary Apartment
+R- 103 Two Family Bldgs
+R- 436 Addn to increase housing units
+
+Or this is all pointless and I can just say that if it has a housing unit then we consider it.
+
+```{r}
+
+housing_types <- c("C- 101 Single Family Houses", "C- 103 Two Family Bldgs", "C-104 Three & Four Family Bldgs", "C- 105 Five or More Family Blgds", "C-106 Mixed Use", "R-101 Single Family Houses", "R-102 Secondary Apartment", "R- 103 Two Family Bldgs", "R- 436 Addn to increase housing units")
+
+housing <- permits_clean |> 
+  filter(permit_class %in% housing_types)
+```
+
+## Housing Permits Issued per year 
+
+```{r}
+per_year <- housing |> group_by(calendar_year_issued) |> # Travis prefers calendar year over fiscal year
+  count(permit_type) |> filter(!calendar_year_issued==2026) # KH: dropping 2026 since this year isn't done
+```
+
+### Chart 
+
+```{r}
+# KH: not cleaning this up because I don't feel like it at this moment
+ per_year |> ggplot(
+   aes(
+     x = calendar_year_issued, 
+     y = n
+   )
+ ) + geom_point() +
+  geom_line()
+```
+## Getting Duration
+
+After speaking with Robbie Searcy from Austin Development Services, we determined that the best way to find how long a project is we would need to compare the "issued date" with the "completed date." However, there is one note that the certificate of occupancy "is provided to the applicant after the constructino work has been completed and passed all required inspections." But this column in the data set does not have a date associated with it, so I will just heed Searcy's advice here. 
+
+```{r}
+construction_time <- housing |> 
+  select(project_name, issued_date, completed_date, jurisdiction, original_address_1, applicant_organization, project_id, calendar_year_issued, permit_class) |> 
+  mutate(project_length = 
+           as.numeric(difftime(completed_date, issued_date, units = "weeks")))
+construction_time
+# check 5918 Lookout Mountain Dr, project length negative?? think completed and issued dates are swapped.
+```
+
+## Means of Completed Projects per year (in weeks) (overall)
+
+```{r}
+construction_time |> 
+  filter(!calendar_year_issued==2026) |>
+  filter(project_length >= 1) |> 
+  group_by(calendar_year_issued) |> 
+  summarize("avg_time" = mean(project_length)) |> 
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = avg_time
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    y = "Project Length in Weeks", 
+    x = "Year"
+  )
+
+## Average construction time has fallen from pandemic levels? I think type would be good here
+   
+```
+
+## Average Projects Lengths by permit classificiation
+
+This includes various types of permits. Let's get a look at numbers per permit type. 
+
+```{r}
+construction_time |> 
+  filter(!calendar_year_issued==2026) |>
+  filter(project_length >= 1) |> 
+  group_by(calendar_year_issued, permit_class) |> 
+  summarize("avg_time" = mean(project_length)) |> # print()
+
+#KH: I like seeing the charts
+ggplot(aes(
+    x = calendar_year_issued, 
+    y = avg_time, 
+    group = permit_class,
+    color = permit_class
+  )) + 
+  geom_point() + geom_jitter(width = 0.1, height = 0.1) ## KH: there's something weird here... only picking up duplexes and single family homes? 
+```
+
+
