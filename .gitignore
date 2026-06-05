@@ -14,7 +14,6 @@ _book/
 
 # System
 .DS_Store
-data-raw/
 .positai
 
 data-raw/
