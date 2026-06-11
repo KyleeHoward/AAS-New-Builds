@@ -1,4 +1,3 @@
-
 ---
 title: "New Buildings"
 format: html
@@ -13,6 +12,7 @@ format: html
 
 library(tidyverse)
 library(janitor)
+library(ggplot2)
 ```
 
 
@@ -25,8 +25,8 @@ permits |> colnames()
 permits_clean <- permits |> clean_names(
 ) |> 
   filter(work_class == "New", permit_type_desc == "Building Permit") |> # I looked it up and multifamily housing is considered commerical!! no need to filter out
-  select(permit_type, permit_num, permit_class_mapped, permit_class, work_class, condominium, project_name, description, tcad_id, issued_date,calendar_year_issued, fiscal_year_issued, status_current, expires_date, completed_date, housing_units,number_of_floors, total_job_valuation, original_zip, council_district, jurisdiction, link, project_id, master_permit_num,contractor_company_name,contractor_phone,contractor_zip, applicant_organization, applicant_phone, certificate_of_occupancy, original_address_1) |>  # KH: just grabbed the ones that seemed important
-  filter(calendar_year_issued >= 1996) ## grabbing only thirty fifty years
+  select(permit_type, permit_num, permit_class_mapped, permit_class, work_class, condominium, project_name, description, tcad_id, issued_date,calendar_year_issued, fiscal_year_issued, status_current, expires_date, completed_date, council_district, housing_units,number_of_floors, total_job_valuation, original_zip, council_district, jurisdiction, link, project_id, master_permit_num,contractor_company_name,contractor_phone,contractor_zip, applicant_organization, applicant_phone, certificate_of_occupancy, original_address_1) |>  # KH: just grabbed the ones that seemed important
+  filter(calendar_year_issued >= 1996) ## grabbing only thirty years
 
 ```
 
@@ -53,20 +53,24 @@ Or this is all pointless and I can just say that if it has a housing unit then w
 
 ```{r}
 
-housing_types <- c("C- 101 Single Family Houses", "C- 103 Two Family Bldgs", "C-104 Three & Four Family Bldgs", "C- 105 Five or More Family Blgds", "C-106 Mixed Use", "R-101 Single Family Houses", "R-102 Secondary Apartment", "R- 103 Two Family Bldgs", "R- 436 Addn to increase housing units")
+housing_types <- c("C- 101 Single Family Houses", "C- 103 Two Family Bldgs", "C- 104 Three & Four Family Bldgs", "C- 105 Five or More Family Blgds", "C- 106 Mixed Use", "R- 101 Single Family Houses", "R- 102 Secondary Apartment", "R- 103 Two Family Bldgs", "R- 436 Addn to increase housing units")
+
+housing_types
 
 housing <- permits_clean |> 
   filter(permit_class %in% housing_types)
 ```
 
-## Housing Permits Issued per year 
+## Overview
+
+### Housing Permits Issued per year 
 
 ```{r}
 per_year <- housing |> group_by(calendar_year_issued) |> # Travis prefers calendar year over fiscal year
   count(permit_type) |> filter(!calendar_year_issued==2026) # KH: dropping 2026 since this year isn't done
 ```
 
-### Chart 
+#### Chart 
 
 ```{r}
 # KH: not cleaning this up because I don't feel like it at this moment
@@ -76,22 +80,25 @@ per_year <- housing |> group_by(calendar_year_issued) |> # Travis prefers calend
      y = n
    )
  ) + geom_point() +
-  geom_line()
+  geom_line() + 
+  labs(
+    title = "Housing Permits Issued per year"
+  )
 ```
-## Getting Duration
+### Getting Duration
 
 After speaking with Robbie Searcy from Austin Development Services, we determined that the best way to find how long a project is we would need to compare the "issued date" with the "completed date." However, there is one note that the certificate of occupancy "is provided to the applicant after the constructino work has been completed and passed all required inspections." But this column in the data set does not have a date associated with it, so I will just heed Searcy's advice here. 
 
 ```{r}
 construction_time <- housing |> 
-  select(project_name, issued_date, completed_date, jurisdiction, original_address_1, applicant_organization, project_id, calendar_year_issued, permit_class) |> 
+  select(project_name, issued_date, completed_date, jurisdiction, original_address_1, applicant_organization, project_id, calendar_year_issued, permit_class, council_district) |> 
   mutate(project_length = 
            as.numeric(difftime(completed_date, issued_date, units = "weeks")))
 construction_time
 # check 5918 Lookout Mountain Dr, project length negative?? think completed and issued dates are swapped.
 ```
 
-## Means of Completed Projects per year (in weeks) (overall)
+#### Averages of Completed Projects per year (in weeks) (overall)
 
 ```{r}
 construction_time |> 
@@ -108,14 +115,17 @@ construction_time |>
     y = "Project Length in Weeks", 
     x = "Year"
   )
-
 ## Average construction time has fallen from pandemic levels? I think type would be good here
    
 ```
 
-## Average Projects Lengths by permit classificiation
+#### Average Projects Lengths by permit classificiation
 
 This includes various types of permits. Let's get a look at numbers per permit type. 
+
+Other items I want: 
+- Distinct by type
+- Get multi-use specific data
 
 ```{r}
 construction_time |> 
@@ -131,7 +141,213 @@ ggplot(aes(
     group = permit_class,
     color = permit_class
   )) + 
-  geom_point() + geom_jitter(width = 0.1, height = 0.1) ## KH: there's something weird here... only picking up duplexes and single family homes? 
+  geom_point() + geom_jitter(width = 0.1, height = 0.1) 
+
+#KH: High rises take longer, who could have guessed?
+```
+## Permits issued by District 
+
+One of the main questions is where are most of the building permits getting issued? For this, I will do one within our 30 year window, a 20 year window and then a 10 year window, categorizing by district. Then, do individualized looks at those districts. 
+
+### Overall view
+
+```{r}
+cols <- c("1"="#E69F00","2"="#56B4E9","3"="#009E73","4"="#F0E442","5"="#0072B2",
+          "6"="#D55E00","7"="#CC79A7","8"="#000000","9"="red4","10"="#44AA99")
+
+districts <- housing |>
+  mutate(council_district = as.factor(council_district)) |>  # ← add this
+  group_by(calendar_year_issued, council_district) |>
+  count(permit_type) 
+
+districts |>
+  ggplot(aes(x = calendar_year_issued, y = n, fill = council_district)) +
+  geom_col() +
+  scale_fill_manual(values = cols) + 
+  geom_vline(xintercept = 2020, color = "red", linetype ="dashed") + 
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + 
+  labs(
+    x = "Year", 
+    y = "New Construction Permits Issued"
+  )
+# KH: I know this looks a mess, I just needed a chart
+
+#KH: District's 1 and 2 consistently outpace housing permits, with other districts getting minor growth in comparison.
+```
+### Table 
+
+```{r}
+districts |>
+  group_by(council_district) |>
+  summarise(total = sum(n)) |> 
+  print()
+
+# KH: District 1 takes the cake on permits issuesd at 17,283 construction permits for housing being issues. 
 ```
 
+### District 1
 
+```{r}
+districts |> 
+  filter(council_district == "1") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 1",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+```
+
+### District 2
+```{r}
+districts |> 
+  filter(council_district == "2") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 2",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+```
+### District 3
+```{r}
+districts |> 
+  filter(council_district == "3") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 3",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+```
+
+### District 4
+```{r}
+districts |> 
+  filter(council_district == "4") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 4",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+```
+
+### District 5
+```{r}
+districts |> 
+  filter(council_district == "5") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 5",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+
+# KH: They just run out of room?
+```
+
+### District 6
+```{r}
+districts |> 
+  filter(council_district == "6") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 6",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+
+# KH: Mostly single family homes is this area? Lots of traction before the recession, crawling back up and then drops at the Pandemic?
+```
+
+### District 7
+```{r}
+districts |> 
+  filter(council_district == "7") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 7",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+```
+### District 8
+```{r}
+districts |> 
+  filter(council_district == "8") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 8",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+```
+
+### District 9
+```{r}
+districts |> 
+  filter(council_district == "9") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  geom_vline(xintercept = 2004, color = "purple", linetype ="dashed") + # KH: This is when the University Neighborhood Overlay was introduced, which wanted to foster more higher density growth in West Campus
+  labs(
+    title = "District 9",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+
+#KH: For this section, I would also want to look at renovations? Assuming that lower density structures would need to be demlioshed in order to place higher density builds would mean we need new construction permits, right?
+
+```
+
+### District 10
+```{r}
+districts |> 
+  filter(council_district == "10") |>
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + geom_vline(xintercept = 2020, color = "red", linetype = "dashed") +
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + # KH: felt important to have markers of the recession + pandemic
+  labs(
+    title = "District 10",
+    y = "New Construction Permits", 
+    x = "Year"
+  )
+```
