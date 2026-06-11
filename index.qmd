@@ -66,8 +66,11 @@ housing <- permits_clean |>
 ### Housing Permits Issued per year 
 
 ```{r}
-per_year <- housing |> group_by(calendar_year_issued) |> # Travis prefers calendar year over fiscal year
-  count(permit_type) |> filter(!calendar_year_issued==2026) # KH: dropping 2026 since this year isn't done
+per_year <- housing |> 
+  group_by(calendar_year_issued) |> # Travis prefers calendar year over fiscal year
+  count(permit_type) |> 
+  filter(!calendar_year_issued==2026)
+# KH: dropping 2026 since this year isn't done
 ```
 
 #### Chart 
@@ -91,7 +94,7 @@ After speaking with Robbie Searcy from Austin Development Services, we determine
 
 ```{r}
 construction_time <- housing |> 
-  select(project_name, issued_date, completed_date, jurisdiction, original_address_1, applicant_organization, project_id, calendar_year_issued, permit_class, council_district) |> 
+  select(project_name, issued_date, completed_date, jurisdiction, original_address_1, applicant_organization, project_id, calendar_year_issued, permit_class, council_district, original_zip) |> 
   mutate(project_length = 
            as.numeric(difftime(completed_date, issued_date, units = "weeks")))
 construction_time
@@ -156,7 +159,7 @@ cols <- c("1"="#E69F00","2"="#56B4E9","3"="#009E73","4"="#F0E442","5"="#0072B2",
           "6"="#D55E00","7"="#CC79A7","8"="#000000","9"="red4","10"="#44AA99")
 
 districts <- housing |>
-  mutate(council_district = as.factor(council_district)) |>  # ← add this
+  mutate(council_district = as.factor(council_district)) |> 
   group_by(calendar_year_issued, council_district) |>
   count(permit_type) 
 
@@ -173,13 +176,15 @@ districts |>
 # KH: I know this looks a mess, I just needed a chart
 
 #KH: District's 1 and 2 consistently outpace housing permits, with other districts getting minor growth in comparison.
+
+# GET INTO MAP
 ```
 ### Table 
 
 ```{r}
-districts |>
+district_concentration <- districts |>
   group_by(council_district) |>
-  summarise(total = sum(n)) |> 
+  summarise(total = sum(n)) # |> 
   print()
 
 # KH: District 1 takes the cake on permits issuesd at 17,283 construction permits for housing being issues. 
@@ -351,3 +356,256 @@ districts |>
     x = "Year"
   )
 ```
+
+## Project Duration by District 
+
+- 
+
+```{r}
+time_district <- construction_time |> 
+  filter(!calendar_year_issued==2026) |>
+  filter(project_length >= 1) |> 
+  mutate(council_district = as.character(council_district)) |>
+  group_by(calendar_year_issued, council_district) |>
+  summarize("avg_time" = mean(project_length), .groups = "drop") 
+
+# time_distrcit |> print()
+
+time_district |>  
+ggplot(aes(
+    x = calendar_year_issued, 
+    y = avg_time, 
+    group = council_district,
+    color = council_district
+  )) + 
+  geom_point() + geom_line() + 
+  scale_color_manual(values = cols)
+
+# Light blue (District 2), Orange (District 1) seems to be the quickest turnaround, could add to point of building as fast as we can and then what?
+
+# GET INTO MAP
+  
+```
+(KH: Do I need to do like a per capita thing? Like a ratio of total projects/length of time? I feel like average covers this.)
+
+### Districts 1, 2, 9, 5 
+
+Pulling out these districts since 1 & 2 are top performers, downtown and then Universtiy Area
+
+```{r}
+time_district |> 
+  filter(council_district == "1") |> 
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = avg_time
+  )) + 
+  geom_point() + geom_line() + labs(
+    title = "Average construction time in District 1 (in weeks)"
+  )
+  
+# KH: crazy growth in oughts
+```
+```{r}
+time_district |> 
+  filter(council_district == "2") |> 
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = avg_time
+  )) + 
+  geom_point() + geom_line() + labs(
+    title = "Average construction time in District 2 (in weeks)"
+  )
+# KH: Districts 1 & 2 show similar patterns, main districts people are moving too?
+```
+
+```{r}
+time_district |> 
+  filter(council_district == "9") |> 
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = avg_time
+  )) + 
+  geom_point() + geom_line() + labs(
+    title = "Average construction time in District 9 (in weeks)"
+  )
+
+#KH: Did the university overlap even do anything?? We should track student growth with this?
+```
+
+```{r}
+time_district |> 
+  filter(council_district == "5") |> 
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = avg_time
+  )) + 
+  geom_point() + geom_line() + labs(
+    title = "Average construction time in District 5 (in weeks)"
+  )
+
+#KH: higher density leads to longer construction times, some drop in 2025, DB90 program?
+```
+## Takeaways so far
+
+After speaking with Travis, we came to two conclusions so far: 
+- Growth is primarily concentrated in the East Side, giving light to a historical disparity between Austin's west and eastside. 
+  - Districts not only getting more permits but buildings are going up faster
+- In general, after more than 20 years of growing development, including a spike around the COVID-19 pandemic, Austin's developments slows to a "screeching halt." 
+
+## Zipcode
+
+Zipcodes get a little more specific than districts. Getting general ideas from by district, but could get more detailed look here. There's 81 zip codes, so none of my fun charts. I need to get my big data pants on and learn leaflet.
+
+```{r}
+
+#KH: number of permits issued per year
+zips_permits <- 
+  housing |> 
+  group_by(calendar_year_issued, original_zip) |> 
+  count(permit_type) # |> print()
+
+#KH: project duration by zip 
+zips_duration <- 
+  construction_time |> 
+  filter(!calendar_year_issued==2026) |>
+  filter(project_length >= 1) |>
+  group_by(original_zip) |> #group_by(calendar_year_issued, original_zip) if you want a time series
+  summarize("avg_time (wks)" = mean(project_length), .groups = "drop") # |> print()
+
+
+#KH: concentration (IE, total permits issued overall)
+zips_concentration <- zips_permits |> 
+  group_by(original_zip) |> 
+  summarize("total" = sum(n)) # |> print()
+# KH: >> this into the maps
+
+#KH: Forget to do this one upstairs, whoops: 
+district_duration <- 
+  construction_time |> 
+  filter(!calendar_year_issued==2026) |>
+  filter(project_length >= 1) |> 
+  group_by(council_district) |> 
+  summarize("avg_time" = mean(project_length))
+  
+```
+### Top developing Zip codes for housing
+
+#### Since 1996
+
+```{r}
+zips_concentration |> filter(total >= 3600) |> 
+arrange(desc(total)) |> print()
+```
+In the last thirty years, the city of Austin sprawled, with a majority of the zipcodes in the top development hot spots being in Austin's subrubs, with the expection of 78723 (Mueller) and 78702 (Riverside). 
+
+#### Since 2006 + So on
+
+```{r}
+since_2006 <-
+zips_permits |> 
+  group_by(original_zip) |> 
+  filter(calendar_year_issued >= 2006) |> 
+  summarize("total" = sum(n)) |> 
+  arrange(desc(total)) |> 
+  head(10) |> 
+  print()
+
+since_2016 <- 
+ zips_permits |> 
+  group_by(original_zip) |> 
+  filter(calendar_year_issued >= 2016) |> 
+  summarize("total" = sum(n)) |> 
+  arrange(desc(total)) |> 
+  head(10) |> 
+  print() 
+
+since_2019 <-
+  zips_permits |> 
+  group_by(original_zip) |> 
+  filter(calendar_year_issued >= 2019) |> 
+  summarize("total" = sum(n)) |> 
+  arrange(desc(total)) |> 
+  head(10) |> 
+  print()
+
+```
+
+
+### East Riverside
+
+[Going through major developments](https://www.statesman.com/news/article/austin-east-riverside-light-rail-21333956.php), zipcode 78741 --> checking their housing
+
+```{r}
+housing |> 
+  filter(original_zip == 78741) |> 
+  group_by(calendar_year_issued) |> 
+  count(permit_type) |> 
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + 
+  labs(
+    title = "Building permits issued in East Riverside"
+  )
+```
+
+
+
+
+## Maps 
+
+Pulling all the datasets I'm getting into the map, using zips_permits for later...
+
+```{r}
+# By district total (30 years)
+district_concentration
+
+# By district project avg timeline (30 yrs)
+district_duration
+
+# Zip code totals (30 yrs)
+zips_concentration
+
+# Zipcode Avg, Project duration (30 yrs)
+zips_duration
+
+```
+
+### Geocoding??
+
+```{r}
+library(tidygeocoder)
+
+geos_housing <- housing |>
+  distinct(original_zip) |>
+  geocode(postalcode = original_zip, method = "osm")
+
+
+housing_with_geos <- 
+  housing |> filter(original_zip >=0) |>
+  left_join(geos_housing, 
+            by = "original_zip") 
+  )
+
+library(sf)
+
+housing_with_geos |>
+  st_as_sf(coords = c("long", "lat"), crs = 4326) |>
+  mapview()
+
+```
+
+### Mapview
+
+```{r}
+library(mapview)
+
+construction_time |> colnames()
+
+permits_clean |> colnames()
+```
+
+## Further Questions
+
+- Should we get within the last five/six years and make the maps for concentration since the pandemic?
+- Other metrics we should look at? Percentage that is mixed development vs duplexes, what is getting built where?
