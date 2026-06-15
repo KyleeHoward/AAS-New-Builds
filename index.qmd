@@ -53,12 +53,21 @@ Or this is all pointless and I can just say that if it has a housing unit then w
 
 ```{r}
 
-housing_types <- c("C- 101 Single Family Houses", "C- 103 Two Family Bldgs", "C- 104 Three & Four Family Bldgs", "C- 105 Five or More Family Blgds", "C- 106 Mixed Use", "R- 101 Single Family Houses", "R- 102 Secondary Apartment", "R- 103 Two Family Bldgs", "R- 436 Addn to increase housing units")
+housing_types <- c("C- 101 Single Family Houses", 
+                   "C- 103 Two Family Bldgs", 
+                   "C- 104 Three & Four Family Bldgs", 
+                   "C- 105 Five or More Family Blgds", 
+                   "C- 106 Mixed Use", 
+                   "R- 101 Single Family Houses", 
+                   "R- 102 Secondary Apartment", 
+                   "R- 103 Two Family Bldgs")
 
 housing_types
 
 housing <- permits_clean |> 
-  filter(permit_class %in% housing_types)
+  filter(permit_class %in% housing_types) 
+
+housing |> distinct(permit_class)
 ```
 
 ## Overview
@@ -182,12 +191,17 @@ districts |>
 ### Table 
 
 ```{r}
+
 district_concentration <- districts |>
   group_by(council_district) |>
-  summarise(total = sum(n)) # |> 
+  summarise(total = sum(n)) |> 
   print()
 
-# KH: District 1 takes the cake on permits issuesd at 17,283 construction permits for housing being issues. 
+districts |> filter(council_district == "1")
+
+# KH: District 1 takes the cake on permits issuesd at 17,283 construction permits. 
+
+424 1347
 ```
 
 ### District 1
@@ -357,9 +371,8 @@ districts |>
   )
 ```
 
-## Project Duration by District 
 
-- 
+### Project Duration per district
 
 ```{r}
 time_district <- construction_time |> 
@@ -379,7 +392,9 @@ ggplot(aes(
     color = council_district
   )) + 
   geom_point() + geom_line() + 
-  scale_color_manual(values = cols)
+  scale_color_manual(values = cols) + 
+  geom_hline(yintercept = 52, color = "red", linetype = "dashed") + 
+  geom_hline(yintercept = 104, color = "purple", linetype = "dashed")
 
 # Light blue (District 2), Orange (District 1) seems to be the quickest turnaround, could add to point of building as fast as we can and then what?
 
@@ -401,7 +416,8 @@ time_district |>
   )) + 
   geom_point() + geom_line() + labs(
     title = "Average construction time in District 1 (in weeks)"
-  )
+  ) + 
+  geom_hline(yintercept = 52, color = "red", linetype = "dashed") # one year mark
   
 # KH: crazy growth in oughts
 ```
@@ -414,7 +430,8 @@ time_district |>
   )) + 
   geom_point() + geom_line() + labs(
     title = "Average construction time in District 2 (in weeks)"
-  )
+  )+ 
+  geom_hline(yintercept = 52, color = "red", linetype = "dashed")
 # KH: Districts 1 & 2 show similar patterns, main districts people are moving too?
 ```
 
@@ -427,9 +444,10 @@ time_district |>
   )) + 
   geom_point() + geom_line() + labs(
     title = "Average construction time in District 9 (in weeks)"
-  )
+  ) + 
+  geom_hline(yintercept = 52, color = "red", linetype = "dashed")
 
-#KH: Did the university overlap even do anything?? We should track student growth with this?
+#KH: Did the university overlay even do anything?? We should track student growth with this?
 ```
 
 ```{r}
@@ -441,14 +459,14 @@ time_district |>
   )) + 
   geom_point() + geom_line() + labs(
     title = "Average construction time in District 5 (in weeks)"
-  )
+  )+ 
+  geom_hline(yintercept = 52, color = "red", linetype = "dashed")
 
-#KH: higher density leads to longer construction times, some drop in 2025, DB90 program?
 ```
 ## Takeaways so far
 
 After speaking with Travis, we came to two conclusions so far: 
-- Growth is primarily concentrated in the East Side, giving light to a historical disparity between Austin's west and eastside. 
+- Growth is primarily concentrated in the East Side, giving light to a historical disparity between Austin's west and east sides. 
   - Districts not only getting more permits but buildings are going up faster
 - In general, after more than 20 years of growing development, including a spike around the COVID-19 pandemic, Austin's developments slows to a "screeching halt." 
 
@@ -509,6 +527,7 @@ zips_permits |>
   arrange(desc(total)) |> 
   head(10) |> 
   print()
+# mutate("timeframe" = "from_96")
 
 since_2016 <- 
  zips_permits |> 
@@ -518,6 +537,7 @@ since_2016 <-
   arrange(desc(total)) |> 
   head(10) |> 
   print() 
+# mutate("timeframe" = "from_16")
 
 since_2019 <-
   zips_permits |> 
@@ -527,6 +547,9 @@ since_2019 <-
   arrange(desc(total)) |> 
   head(10) |> 
   print()
+# mutate("timeframe" = "from_19")
+
+# bind_rows(since_2006, since_2016, since_2019) |> distinct(original_zip)
 
 ```
 
@@ -549,63 +572,128 @@ housing |>
   )
 ```
 
+## Highrises & Mixed-use Developments
 
+(KH: Followed up with the city to ask what permit_class they use for highrises). 
 
-
-## Maps 
-
-Pulling all the datasets I'm getting into the map, using zips_permits for later...
+1. Count number of highrises & mixed-use developments given out in the last 30 years
+2. Track where, district and zipcode, are they getting built. 
+3. Track how long its taking to get them up. 
 
 ```{r}
-# By district total (30 years)
-district_concentration
 
-# By district project avg timeline (30 yrs)
-district_duration
+highrise <- c("C- 104 Three & Four Family Bldgs", "C- 106 Mixed Use")
 
-# Zip code totals (30 yrs)
-zips_concentration
+MUDS <- housing |> 
+  filter(permit_class == "C- 106 Mixed Use")
 
-# Zipcode Avg, Project duration (30 yrs)
-zips_duration
+three_four <- housing |> 
+  filter(permit_class == "C- 104 Three & Four Family Bldgs") # these seem to be mostly condos and townhomes?
 
+ # bind_rows(MUDS, three_four) KH: ignoring this pending city discretion
 ```
 
-### Geocoding??
+Since 2007, there has been 122 permits for mixed-use developments in the city of Austin.
+
+### Permits Issued per Year
 
 ```{r}
-library(tidygeocoder)
+mud_permits <- MUDS |> 
+  group_by(calendar_year_issued) |> 
+  count(permit_type)  
+  # |> print()
+  
 
-geos_housing <- housing |>
-  distinct(original_zip) |>
-  geocode(postalcode = original_zip, method = "osm")
-
-
-housing_with_geos <- 
-  housing |> filter(original_zip >=0) |>
-  left_join(geos_housing, 
-            by = "original_zip") 
+mud_permits |> ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + 
+  geom_line() + 
+  labs(
+    title = "Permits issued for Mixed Use developments", 
+    y = "Permits Issued", 
+    x = "Year"
   )
-
-library(sf)
-
-housing_with_geos |>
-  st_as_sf(coords = c("long", "lat"), crs = 4326) |>
-  mapview()
-
 ```
-
-### Mapview
+### Project Length
 
 ```{r}
-library(mapview)
-
-construction_time |> colnames()
-
-permits_clean |> colnames()
+mud_project_length <- construction_time |> 
+  filter(permit_class == "C- 106 Mixed Use") |> 
+  filter(!calendar_year_issued==2026) |>
+  filter(project_length >= 1) |> 
+  group_by(calendar_year_issued, permit_class) |> 
+  summarize("avg_time" = mean(project_length), .groups = "drop")
+  
+mud_project_length |> 
+  ggplot(
+    aes(
+      x = calendar_year_issued, 
+      y = avg_time
+    )
+  ) + geom_point() + 
+  geom_line()
+# KH: no discernible trend
 ```
+
+### MUDs by district, Zipcode
+
+#### By district
+
+```{r}
+# overall
+MUDS |> 
+  group_by(council_district) |> 
+  count(permit_type) |> 
+  print()
+# Rainy and UT area takes the cake for approved mixed use permits, top three districts all reach center city, which is...duh
+```
+```{r}
+# by year 
+MUDS |> 
+  group_by(council_district, calendar_year_issued) |> 
+  count(permit_type) |> # print()
+
+ggplot(aes(x = calendar_year_issued, y = n, fill = factor(council_district))) +
+  geom_col() +
+  scale_fill_manual(values = cols)+ 
+  geom_vline(xintercept = 2020, color = "red", linetype ="dashed") + 
+  geom_vline(xintercept = 2008, color = "red", linetype = "dashed") + 
+  labs(
+    x = "Year", 
+    y = "Mixed Use Developments issued by district by year"
+  )
+# just easier to show in comparison, still that district 9 is leading at any given time, it's not even close
+```
+
+#### by Zipcode
+
+```{r}
+MUDS |> 
+  group_by(original_zip) |> 
+  count(permit_type) |> 
+  arrange(desc(n)) |> 
+  head(10) |> 
+  print()
+
+
+# KH: Don't have my journey on me, here are the gen areas of each zip 
+# 1. North eastern austin, touching I 35
+# 2. South eastern Austin, what we historically think of as "East Austin"
+# 3. Southwest Austin, other side of the river
+# 4. Airport Blvd from MLK/Manor to the river
+# 5. Manor
+# 6. Downtown through Rainey Street
+# 7. Northwest Austin, going out to Cedar Park, where 99 Ranch is
+# 8. West Campus
+# 9. East Riverside
+# Southwest, immediately behind St. Eds 
+```
+
 
 ## Further Questions
 
 - Should we get within the last five/six years and make the maps for concentration since the pandemic?
 - Other metrics we should look at? Percentage that is mixed development vs duplexes, what is getting built where?
+
+
