@@ -17,3 +17,5 @@ _book/
 .positai
 
 data-raw/
+
+/.quarto/

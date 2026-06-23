@@ -2,4 +2,101 @@
 title: "map-building"
 format: html
 ---
+## Libraries and loading in data
+
+I still have no idea what I'm doing with this so I'm pulling everything that I may need
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(janitor)
+library(tidygeocoder)
+library(mapview)
+```
+
+```{r}
+housing_permits <- read_rds("data-export/housing_clean.rds")
+
+construction_times <- read_rds("data-export/project_length.rds") 
+
+# I have a weird thing about naming things the same thing even if its a different notebook i will not be tamed
+```
+
+Previously, this was a mess express. We are restarting with the Hearst way to geocode --> geocode.io (reportedly) (jk im using tidygeocoder)
+
+## Cleaning for maps
+
+```{r}
+df_for_geocoding <- housing_permits |>
+  filter(!(completed_date <= as.Date("2026-06-03")) |> replace_na(FALSE)) |>
+  select(project_name,
+         description,
+         issued_date, 
+         housing_units, 
+         number_of_floors, 
+         original_address_1,
+         original_zip, 
+         council_district, 
+         completed_date,
+         link) |>
+  mutate(
+  clean_address = toupper(original_address_1), # input your address column to clean here
+
+  # road name abbreviations
+  clean_address = str_replace(clean_address, "\\b(DR)\\b", "DRIVE"),
+  clean_address = str_replace(clean_address, "\\b(RD)\\b", "ROAD"),
+  clean_address = str_replace(clean_address, "\\b(ST)\\b", "STREET"),
+  clean_address = str_replace(clean_address, "\\b(RTE)\\b", "ROUTE"),
+  clean_address = str_replace(clean_address, "\\b(BLVD)\\b", "BOULEVARD"),
+  clean_address = str_replace(clean_address, "\\b(TRL)\\b", "TRAIL"),
+  clean_address = str_replace(clean_address, "\\b(LN)\\b", "LANE"),
+  clean_address = str_replace(clean_address, "\\b(PL)\\b", "PLACE"), # noticed we missed one
+  # Cardinal directions
+  clean_address = str_replace(clean_address, "\\b(S)\\b", "SOUTH"),
+  clean_address = str_replace(clean_address, "\\b(W)\\b", "WEST"),
+  clean_address = str_replace(clean_address, "\\b(N)\\b", "NORTH"),
+  clean_address = str_replace(clean_address, "\\b(E)\\b", "EAST"),
+  clean_address = str_replace(clean_address, "\\b(NE)\\b", "NORTHEAST"),
+  clean_address = str_replace(clean_address, "\\b(SE)\\b", "SOUTHEAST"),
+  clean_address = str_replace(clean_address, "\\b(NW)\\b", "NORTHWEST"),
+  clean_address = str_replace(clean_address, "\\b(SW)\\b", "SOUTHWEST"),
+
+  # interstates, highways, etc.
+  clean_address = str_replace(clean_address, "\\b(HWY)\\b", "HIGHWAY"),
+  clean_address = str_replace(clean_address, "\\b(IH)\\b", "INTERSTATE"),
+  clean_address = str_replace(clean_address, "\\b(FWY)\\b", "FREEWAY"),
+
+  # Extract suites, apts, etc., put in new col
+  clean_address_2 = str_extract(clean_address,     "(?:Apt|Apartment|unit#|Unit|#|SUITE|\\sSTE)+\\s?([A-Za-z0-9]+)"), 
+
+  # Remove suites, apts, etc.
+  clean_address = str_remove(clean_address, "(?:Apt|Apartment|unit#|Unit|#|SUITE|\\sSTE)+\\s?([A-Za-z0-9]+)"), 
+  
+  # Create a clean zip code column if you need it 
+  # clean_zip = str_sub(zip, start = 1, end = 5) #replace with your zip code column here
+  
+  # add a city, state column
+  city = "Austin",
+  state = "Texas", 
+  country = "United States"
+)
+# new builds in progress
+
+df_for_geocoding |> 
+  write_csv("data-export/df_for_geo.csv")
+```
+
+Filtering for projects still under construction as of June 3rd leaves me with 5,119 rows.
+
+## Tidygeocoder 
+
+```{r}
+df_for_geocoding |> 
+  geocode(
+    clean_address, method = "osm", lat = latitude, long = longitude
+  )
+```
 

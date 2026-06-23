@@ -28,6 +28,7 @@ permits_clean <- permits |> clean_names(
   select(permit_type, permit_num, permit_class_mapped, permit_class, work_class, condominium, project_name, description, tcad_id, issued_date,calendar_year_issued, fiscal_year_issued, status_current, expires_date, completed_date, council_district, housing_units,number_of_floors, total_job_valuation, original_zip, council_district, jurisdiction, link, project_id, master_permit_num,contractor_company_name,contractor_phone,contractor_zip, applicant_organization, applicant_phone, certificate_of_occupancy, original_address_1) |>  # KH: just grabbed the ones that seemed important
   filter(calendar_year_issued >= 1996) ## grabbing only thirty years
 
+permits_clean
 ```
 
 ## Determining Permit Class
@@ -64,6 +65,8 @@ housing_types
 
 housing <- permits_clean |> 
   filter(permit_class %in% housing_types) 
+
+housing |> write_rds("data-export/housing_clean.rds") # need this for later
 
 housing |> distinct(permit_class)
 ```
@@ -103,17 +106,19 @@ After speaking with Robbie Searcy from Austin Development Services, we determine
 construction_time <- housing |> 
   select(project_name, issued_date, completed_date, jurisdiction, original_address_1, applicant_organization, project_id, calendar_year_issued, permit_class, council_district, original_zip, housing_units) |> 
   mutate(project_length = 
-           as.numeric(difftime(completed_date, issued_date, units = "weeks")))
+           as.numeric(difftime(completed_date, issued_date, units = "weeks"))) |> 
+  filter(project_length >= 1) # drops NAs
+
 construction_time
-# check 5918 Lookout Mountain Dr, project length negative?? think completed and issued dates are swapped.
+
+construction_time |> write_rds("data-export/project_length.rds")
 ```
 
 #### Averages of Completed Projects per year (in weeks) (overall)
 
 ```{r}
 construction_time |> 
-  filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 1) |> 
+  filter(!calendar_year_issued==2026) |> 
   group_by(calendar_year_issued) |> 
   summarize("avg_time" = mean(project_length)) |> 
   ggplot(aes(
@@ -198,8 +203,6 @@ district_concentration <- districts |>
 districts |> filter(council_district == "1")
 
 # KH: District 1 takes the cake on permits issuesd at 17,283 construction permits. 
-
-424 1347
 ```
 
 ### District 1
@@ -375,7 +378,7 @@ districts |>
 ```{r}
 time_district <- construction_time |> 
   filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 1) |> 
+  filter(project_length >= 0 |> 
   mutate(council_district = as.character(council_district)) |>
   group_by(calendar_year_issued, council_district) |>
   summarize("avg_time" = mean(project_length), .groups = "drop") 
@@ -499,7 +502,7 @@ zips_concentration <- zips_permits |>
 district_duration <- 
   construction_time |> 
   filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 1) |> 
+  filter(project_length >= 0) |> 
   group_by(council_district) |> 
   summarize("avg_time" = mean(project_length))
   
@@ -617,7 +620,7 @@ construction_time |>
   filter(permit_class %in% highrise) |> 
   filter(housing_units >= 10) |>
   filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 1) |> 
+  filter(project_length >= 0) |> 
   group_by(calendar_year_issued) |> 
   summarize("avg_time" = mean(project_length)) |> #print() 
   ggplot(
@@ -639,7 +642,7 @@ construction_time |>
   filter(permit_class %in% highrise) |> 
   filter(housing_units >= 10) |>
   filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 1) |> 
+  filter(project_length >= 0) |> 
   summarize("avg_time" = mean(project_length)) |> 
   print()
 
@@ -647,11 +650,11 @@ construction_time |>
   filter(permit_class %in% highrise) |> 
   filter(housing_units >= 10) |> 
   filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 1) |> 
+  filter(project_length >= 0) |> 
   summarize("median_time" = median(project_length)) |> 
   print()
 
-# takes about 59 weeks on average to get a highrise up, about one year is the most recurring project length
+# takes about 59 weeks on average to get a highrise up, about one year is the middle number or another kind of average.
 ```
 
 ### By district, ZIP
@@ -673,12 +676,6 @@ highrises |>
   print()
 ```
 
-## Further Questions
-
-- Should we get within the last five/six years and make the maps for concentration since the pandemic?
-- Other metrics we should look at? Percentage that is mixed development vs duplexes, what is getting built where?
-- Ric is curious about pulling out only single family housing. 
-
 ## Single Family housing
 
 From our list above here are only the single family housing. But first, I want to look at how much of each of these subtypes make up of the whole. Do to that, I will be counting (again) each subtype by year. 
@@ -689,6 +686,13 @@ R- 101 Single Family Houses
 ### Overall
 
 ```{r}
+# Creating SF data frame
+sf_housing <- c("C- 101 Single Family Houses",
+"R- 101 Single Family Houses")
+
+sf_housing_permits <- housing |> 
+  filter(permit_class %in% sf_housing)
+
 # Austin's housing stock by type 
 housing |> 
   group_by(permit_class) |> 
@@ -711,12 +715,7 @@ Okay, residential single family housing represents a majority of what was built 
 
 ```{r}
 # Single family housing by year
-
-sf_housing <- c("C- 101 Single Family Houses",
-"R- 101 Single Family Houses")
-
-housing |> 
-  filter(permit_class %in% sf_housing) |> 
+sf_housing_permits |>
   group_by(calendar_year_issued, permit_class) |> 
   count(permit_type) |> # print()
   ggplot(
@@ -737,16 +736,17 @@ housing |>
 ### By District and ZIP
 
 ```{r}
-housing |> 
-  filter(permit_class %in% sf_housing) |> 
+sf_housing_permits |> 
   group_by(council_district, permit_class) |> 
   count(permit_type) |> arrange(desc(n))
 ```
 
 ```{r}
-housing |> 
-  filter(permit_class %in% sf_housing) |> 
+sf_housing_permits |> 
   group_by(original_zip, permit_class) |> 
   count(permit_type) |> arrange(desc(n))
 ```
 
+## Further Questions
+
+- Should we get within the last five/six years and make the maps for concentration since the pandemic?
