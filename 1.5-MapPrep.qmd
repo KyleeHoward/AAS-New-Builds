@@ -89,14 +89,18 @@ df_for_geocoding |>
   write_csv("data-export/df_for_geo.csv")
 ```
 
-Filtering for projects still under construction as of June 3rd leaves me with 5,119 rows.
+Filtering for projects still under construction as of June 3rd leaves me with 5,119 rows
 
-## Tidygeocoder 
+## Spliting into chunks for free geocoding with Geocod.io 
 
 ```{r}
-df_for_geocoding |> 
-  geocode(
-    clean_address, method = "osm", lat = latitude, long = longitude
-  )
+chunk_size <- 2500
+
+dir.create("chunks", showWarnings = FALSE)
+
+df_for_geocoding |>
+  group_split(gl(n(), chunk_size, length = n())) |>
+  iwalk(\(chunk, i) write_csv(chunk, sprintf("data-export/chunk_%03d.csv", i)))
+
 ```
 

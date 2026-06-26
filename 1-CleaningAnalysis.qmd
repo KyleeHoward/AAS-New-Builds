@@ -378,10 +378,10 @@ districts |>
 ```{r}
 time_district <- construction_time |> 
   filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 0 |> 
+  filter(project_length >= 0 |>
   mutate(council_district = as.character(council_district)) |>
   group_by(calendar_year_issued, council_district) |>
-  summarize("avg_time" = mean(project_length), .groups = "drop") 
+  summarize("avg_time" = mean(project_length), .groups = "drop")
 
 # time_distrcit |> print()
 
@@ -573,7 +573,7 @@ housing |>
   )
 ```
 
-## Highrises & Mixed-use Developments
+## Multi-family Housing
 
 C- 104 Three & Four Family Bldgs
 C- 105 Five or More Family Bldgs
@@ -585,22 +585,21 @@ C- 105 Five or More Family Bldgs
 
 ```{r}
 
-highrise <- c("C- 104 Three & Four Family Bldgs", "C- 105 Five or More Family Bldgs") # KH: This is what the city told me where "highrises" when I asked, but this doesn't feel right
+multifam <- c("C- 104 Three & Four Family Bldgs", "C- 105 Five or More Family Bldgs") 
 
-highrises <- housing |> 
-  filter(permit_class %in% highrise) |> 
-  filter(housing_units >= 10)
+multifams <- housing |> 
+  filter(permit_class %in% multifam)
 
-highrises |> 
+multifams |> 
   summarise("total_units" = sum(as.numeric(housing_units), na.rm = TRUE))
 ```
 
-Since 1996, there has been 55 permits for multifamily developments with more than 10 housing units per project in the city of Austin, representing about 1,942 housing units.
+Since 1996, there has been 1,161 permits for multifamily developments with more than 5 housing units per project in the city of Austin, representing about 5,377 housing units.
 
 ### Permits Issued per Year
 
 ```{r}
-highrises|> 
+multifams |> 
   group_by(calendar_year_issued) |>
   count(permit_type) |>
   ggplot(
@@ -614,13 +613,14 @@ highrises|>
 ### Project Length
 
 ```{r}
+
+MF_project_length <- construction_time |> 
+  filter(permit_class %in% multifam) |>
+  filter(!calendar_year_issued==2026) |>
+  filter(project_length >= 0)
 # KH: per year
 
-construction_time |> 
-  filter(permit_class %in% highrise) |> 
-  filter(housing_units >= 10) |>
-  filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 0) |> 
+ MF_project_length |> 
   group_by(calendar_year_issued) |> 
   summarize("avg_time" = mean(project_length)) |> #print() 
   ggplot(
@@ -638,23 +638,15 @@ construction_time |>
 
 ```{r}
 # KH: Overall
-construction_time |> 
-  filter(permit_class %in% highrise) |> 
-  filter(housing_units >= 10) |>
-  filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 0) |> 
+MF_project_length |> 
   summarize("avg_time" = mean(project_length)) |> 
   print()
 
-construction_time |> 
-  filter(permit_class %in% highrise) |> 
-  filter(housing_units >= 10) |> 
-  filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 0) |> 
+MF_project_length |> 
   summarize("median_time" = median(project_length)) |> 
   print()
 
-# takes about 59 weeks on average to get a highrise up, about one year is the middle number or another kind of average.
+# takes about 81.4 weeks on average to get a highrise up, about 60 weeks is the middle number or another kind of average.
 ```
 
 ### By district, ZIP
@@ -662,14 +654,14 @@ construction_time |>
 #### By district
 
 ```{r}
-highrises |> 
+multifams |> 
   group_by(council_district) |> 
   count(permit_type) |> 
   arrange(desc(n))
 ```
 
 ```{r}
-highrises |> 
+multifams |> 
   group_by(original_zip) |> 
   count(permit_type) |> 
   arrange(desc(n)) |> 
@@ -738,7 +730,7 @@ sf_housing_permits |>
 ```{r}
 sf_housing_permits |> 
   group_by(council_district, permit_class) |> 
-  count(permit_type) |> arrange(desc(n))
+  count(permit_type) |> arrange(desc(n)) 
 ```
 
 ```{r}
