@@ -3,3 +3,86 @@ title: "1.5-FormattingforDW"
 format: html
 ---
 
+## Libraries and Loading data
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(janitor)
+library(sf)
+```
+
+```{r}
+housing_clean <- read_rds("data-export/housing_clean.rds")
+
+zip_concentrations <- read_rds("data-export/zips_concentration.rds")
+
+zip_lengths <- read_rds("data-export/zip_project_duration.rds")
+
+zips_geom <- read_sf("data-raw/zip_bounds.geojson") #IT WORKED!
+```
+
+
+## Goals
+
+- Create one data frame that includes the following: 
+   - Zipcode
+   - Number of Housing Permits
+   - Average Project Duration in that zip code
+   - Percentage of particular permits
+   - Zip code geometry 
+- Export into GeoSPON file for the Castle template
+
+## Getting percentages
+
+```{r}
+zip_class_pct <- housing_clean |>
+  group_by(original_zip, permit_class) |>
+  summarize(n= n(), .groups = "drop") |>
+  group_by(original_zip) |>
+  mutate(
+    zip_total = sum(n),
+    pct = round(n / zip_total * 100, 1)
+  ) |>
+  ungroup() |> 
+  select(!n)
+```
+
+
+```{r}
+map_list <- zips_geom |> 
+  distinct(zipcode) |> 
+  pull()
+
+excluded_zips <- housing_clean |> distinct(original_zip) |> 
+  filter(!original_zip%in%map_list) |> pull()
+
+excluded_zips
+
+zip_values <- zip_class_pct |> 
+  filter(original_zip%in%map_list) |> 
+  pivot_wider(
+    names_from = permit_class, 
+    values_from = pct,
+    values_fill = 0) |> 
+  clean_names() |> 
+  select(!c_101_single_family_houses, c_103_two_family_bldgs) |> # these make up so little of the percentages...
+  rename("zipcode" = original_zip) |> 
+  mutate("zipcode" = as.character(zipcode))
+# KH: considering simplifing this into residential vs commerical percent or single v multi family housing?
+
+zip_values
+```
+
+## Joining with Geometry 
+
+```{r}
+zips_for_map <- zip_values |> 
+  left_join(zips_geom, by = "zipcode")
+
+zips_for_map |> write_sf("data-export/zipcode_map.geojson")
+```
+
