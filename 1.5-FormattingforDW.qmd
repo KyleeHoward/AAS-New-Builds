@@ -22,7 +22,7 @@ zip_concentrations <- read_rds("data-export/zips_concentration.rds")
 
 zip_lengths <- read_rds("data-export/zip_project_duration.rds")
 
-zips_geom <- read_sf("data-raw/zip_bounds.geojson") #IT WORKED!
+CEN_zip_geom <- read_sf("census_geom/tl_2025_us_zcta520.shp")
 ```
 
 
@@ -33,14 +33,30 @@ zips_geom <- read_sf("data-raw/zip_bounds.geojson") #IT WORKED!
    - Number of Housing Permits
    - Average Project Duration in that zip code
    - Percentage of particular permits
+    - We are spliting this cleanly into Single Family and Multifamily
    - Zip code geometry 
 - Export into GeoSPON file for the Castle template
+
+## Creating Single Family + Multifamily flags 
+
+I feel like the easiest way to condense the permit_class is through creating flags, which is agruably my least favorite thing to do... 
+```{r}
+
+single_family <- c("R- 101 Single Family Houses", "C- 101 Single Family Houses")
+condensed_zips <- 
+  housing_clean |> 
+  mutate(housing_type = if_else(
+    permit_class %in% single_family,
+    "Single Family",
+    "Multi Family"
+  ))
+```
 
 ## Getting percentages
 
 ```{r}
-zip_class_pct <- housing_clean |>
-  group_by(original_zip, permit_class) |>
+zip_class_pct <- condensed_zips |>
+  group_by(original_zip, housing_type) |>
   summarize(n= n(), .groups = "drop") |>
   group_by(original_zip) |>
   mutate(
@@ -49,27 +65,19 @@ zip_class_pct <- housing_clean |>
   ) |>
   ungroup() |> 
   select(!n)
+
+zip_class_pct
 ```
 
 
 ```{r}
-map_list <- zips_geom |> 
-  distinct(zipcode) |> 
-  pull()
-
-excluded_zips <- housing_clean |> distinct(original_zip) |> 
-  filter(!original_zip%in%map_list) |> pull()
-
-excluded_zips
 
 zip_values <- zip_class_pct |> 
-  filter(original_zip%in%map_list) |> 
   pivot_wider(
-    names_from = permit_class, 
+    names_from = housing_type, 
     values_from = pct,
     values_fill = 0) |> 
   clean_names() |> 
-  select(!c_101_single_family_houses, c_103_two_family_bldgs) |> # these make up so little of the percentages...
   rename("zipcode" = original_zip) |> 
   mutate("zipcode" = as.character(zipcode))
 # KH: considering simplifing this into residential vs commerical percent or single v multi family housing?
@@ -77,12 +85,42 @@ zip_values <- zip_class_pct |>
 zip_values
 ```
 
+## Cleaning Census Data
+
+```{r}
+acl_zips <- zip_values |> 
+  distinct(zipcode) |> 
+  pull() # getting filter list for austin
+
+austin_zip_geom <- CEN_zip_geom |> 
+  filter(ZCTA5CE20 %in% acl_zips) |> 
+  rename("zipcode" = ZCTA5CE20) # for join later 
+```
+
+I have an "NA" field in the constructon permit data. I will isolate that, filter it out + pull a few details to ensure we are not missing anything + notation purposes. 
+
+```{r}
+acl <- austin_zip_geom |> 
+  distinct(zipcode) |> 
+  pull()
+
+NA_permits <- zip_values |> 
+  filter(!zipcode%in%acl)
+
+NA_permits
+  
+```
+
+Permits where the ZIP was unavailable (99 total) are 98% single family homes and 100% residential.
+
 ## Joining with Geometry 
 
 ```{r}
 zips_for_map <- zip_values |> 
-  left_join(zips_geom, by = "zipcode")
+  left_join(austin_zip_geom, by = "zipcode")
 
-zips_for_map |> write_sf("data-export/zipcode_map.geojson")
+zips_for_map |> write_sf("data-export/CEN_zipcode_map.geojson")
+
+zips_for_map |> st_write("data-export/CEN_zipcode_map_2.geojson")
 ```
 

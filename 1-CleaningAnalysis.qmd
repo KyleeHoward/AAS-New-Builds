@@ -376,15 +376,18 @@ districts |>
 ### Project Duration per district
 
 ```{r}
-time_district <- construction_time |> 
+time_district <- construction_time |>
   filter(!calendar_year_issued==2026) |>
-  filter(project_length >= 0 |>
+  filter(project_length >= 0) |>
   mutate(council_district = as.character(council_district)) |>
   group_by(calendar_year_issued, council_district) |>
   summarize("avg_time" = mean(project_length), .groups = "drop")
+  
+time_district |> print()
+```
 
-# time_distrcit |> print()
 
+```{r}
 time_district |>  
 ggplot(aes(
     x = calendar_year_issued, 
@@ -481,7 +484,7 @@ ZIP codes get a little more specific than districts. Getting general ideas from 
 zips_permits <- 
   housing |> 
   group_by(calendar_year_issued, original_zip) |> 
-  count(permit_type) # |> print()
+  count(permit_type) # |> print() 
 
 #KH: project duration by zip 
 zips_duration <- 
@@ -491,11 +494,14 @@ zips_duration <-
   group_by(original_zip) |> #group_by(calendar_year_issued, original_zip) if you want a time series
   summarize("avg_time (wks)" = mean(project_length), .groups = "drop") # |> print()
 
+zips_duration |> write_rds("data-export/zip_project_duration.rds") # bringing this for datawrapper
 
 #KH: concentration (IE, total permits issued overall)
 zips_concentration <- zips_permits |> 
   group_by(original_zip) |> 
   summarize("total" = sum(n)) # |> print()
+
+zips_concentration |> write_rds("data-export/zips_concentration.rds")
 # KH: >> this into the maps
 
 #KH: Forget to do this one upstairs, whoops: 
@@ -504,7 +510,7 @@ district_duration <-
   filter(!calendar_year_issued==2026) |>
   filter(project_length >= 0) |> 
   group_by(council_district) |> 
-  summarize("avg_time" = mean(project_length))
+  summarize("avg_time" = mean(project_length)) 
   
 ```
 ### Top developing ZIP codes for housing
