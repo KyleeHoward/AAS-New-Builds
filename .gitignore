@@ -17,6 +17,6 @@ _book/
 .positai
 
 data-raw/
-census_geom
+census_geom/
 
 /.quarto/
