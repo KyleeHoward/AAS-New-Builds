@@ -124,3 +124,36 @@ zips_for_map |> write_sf("data-export/CEN_zipcode_map.geojson")
 zips_for_map |> st_write("data-export/CEN_zipcode_map_2.geojson")
 ```
 
+
+## In progress map
+
+First I need to handcheck all scores with an accurancy under 0.8. Filtering out for those and then exporting into a csv
+
+```{r}
+geo_housing <- read_csv("data-export/geo_housing.csv")
+
+bad_geos <- geo_housing |> filter(geocodio_accuracy_score < 0.8)
+
+bad_geos |> write_csv("data-export/bad_geos_housing.csv")
+```
+
+~ fixing using Google Dev Tools ~
+
+```{r}
+fixed_bad_geos <- read_csv("data-raw/fixed_bad_geos.csv")
+
+fixed_geo_housing <- 
+  bind_rows(geo_housing |> 
+              filter(!geocodio_accuracy_score < 0.8), fixed_bad_geos) |> 
+  arrange(desc(issued_date)) # this just to make it tidy aagin
+
+fixed_geo_housing #5,119, still got all my rows
+
+fixed_geo_housing |> colnames()
+
+wip_map <- fixed_geo_housing |> 
+  select(project_name, description, clean_address, geocodio_latitude, geocodio_longitude)
+
+wip_map |> write.csv("data-export/fixed_wip_map.csv")
+```
+

@@ -47,7 +47,6 @@ RESIDENTIAL PERMITS (KH: grabbing these because housing stock doesn't always hav
 R- 101 Single Family Houses
 R- 102 Secondary Apartment
 R- 103 Two Family Bldgs
-R- 436 Addn to increase housing units
 
 Or this is all pointless and I can just say that if it has a housing unit then we consider it.
 
@@ -56,7 +55,7 @@ Or this is all pointless and I can just say that if it has a housing unit then w
 housing_types <- c("C- 101 Single Family Houses", 
                    "C- 103 Two Family Bldgs", 
                    "C- 104 Three & Four Family Bldgs", 
-                   "C- 105 Five or More Family Blgds", 
+                   "C- 105 Five or More Family Blgds",  # KH: Double check on this
                    "R- 101 Single Family Houses", 
                    "R- 102 Secondary Apartment", 
                    "R- 103 Two Family Bldgs")
@@ -80,6 +79,8 @@ per_year <- housing |>
   group_by(calendar_year_issued) |> # Travis prefers calendar year over fiscal year
   count(permit_type) |> 
   filter(!calendar_year_issued==2026)
+
+per_year |> write_csv("4data-wrapper/permits_per_year.csv")
 # KH: dropping 2026 since this year isn't done
 ```
 
@@ -100,7 +101,7 @@ per_year <- housing |>
 ```
 ### Getting Duration
 
-After speaking with Robbie Searcy from Austin Development Services, we determined that the best way to find how long a project is we would need to compare the "issued date" with the "completed date." However, there is one note that the certificate of occupancy "is provided to the applicant after the constructino work has been completed and passed all required inspections." But this column in the data set does not have a date associated with it, so I will just heed Searcy's advice here. 
+After speaking with Robbie Searcy from Austin Development Services, we determined that the best way to find how long a project is we would need to compare the "issued date" with the "completed date." However, there is one note that the certificate of occupancy "is provided to the applicant after the construction work has been completed and passed all required inspections." But this column in the data set does not have a date associated with it, so I will just heed Searcy's advice here. 
 
 ```{r}
 construction_time <- housing |> 
@@ -129,7 +130,10 @@ construction_time |>
   labs(
     y = "Project Length in Weeks", 
     x = "Year"
-  )
+  ) + 
+  geom_hline(yintercept = 52, color = "blue", linetype = "dashed") # KH: Overlaying permits + duration of construction
+
+
 ## Average construction time has fallen from pandemic levels? I think type would be good here
    
 ```
@@ -198,6 +202,7 @@ districts |>
 district_concentration <- districts |>
   group_by(council_district) |>
   summarise(total = sum(n)) |> 
+  arrange(desc(total))|> 
   print()
 
 districts |> filter(council_district == "1")
@@ -518,8 +523,10 @@ district_duration <-
 #### Since 1996
 
 ```{r}
-zips_concentration |> filter(total >= 3600) |> 
-arrange(desc(total)) |> print()
+zips_concentration |>
+  filter(total >= 3000) |> 
+  arrange(desc(total)) |> 
+  print()
 ```
 In the last thirty years, the city of Austin sprawled, with a majority of the ZIP codes in the top development hot spots being in Austin's subrubs, with the expection of 78723 (Mueller) and 78702 (Riverside). 
 
@@ -533,8 +540,8 @@ zips_permits |>
   summarize("total" = sum(n)) |> 
   arrange(desc(total)) |> 
   head(10) |> 
-  print()
-# mutate("timeframe" = "from_96")
+
+mutate("timeframe" = "from_96")
 
 since_2016 <- 
  zips_permits |> 
@@ -543,8 +550,8 @@ since_2016 <-
   summarize("total" = sum(n)) |> 
   arrange(desc(total)) |> 
   head(10) |> 
-  print() 
-# mutate("timeframe" = "from_16")
+
+mutate("timeframe" = "from_16")
 
 since_2019 <-
   zips_permits |> 
@@ -553,10 +560,9 @@ since_2019 <-
   summarize("total" = sum(n)) |> 
   arrange(desc(total)) |> 
   head(10) |> 
-  print()
-# mutate("timeframe" = "from_19")
+mutate("timeframe" = "from_19")
 
-# bind_rows(since_2006, since_2016, since_2019) |> distinct(original_zip)
+bind_rows(since_2006, since_2016, since_2019) |> filter()
 
 ```
 
@@ -598,9 +604,14 @@ multifams <- housing |>
 
 multifams |> 
   summarise("total_units" = sum(as.numeric(housing_units), na.rm = TRUE))
+
+housing |> summarise("total_units" = sum(as.numeric(housing_units), na.rm = TRUE)) #93,529
+
+housing |> filter(!housing_units>=1) # KH: DOUBLE CHECK NA ROWS
+# KH: what I bet it is --> not a required field on construction permit
 ```
 
-Since 1996, there has been 1,161 permits for multifamily developments with more than 5 housing units per project in the city of Austin, representing about 5,377 housing units.
+Since 1996, there has been 1,161 permits for multifamily developments with more than housing units per project in the city of Austin, representing about 5,377 housing units.
 
 ### Permits Issued per Year
 
@@ -670,7 +681,9 @@ multifams |>
 multifams |> 
   group_by(original_zip) |> 
   count(permit_type) |> 
-  arrange(desc(n)) |> 
+  arrange(desc(n)) 
+
+|> 
   print()
 ```
 
@@ -692,9 +705,15 @@ sf_housing_permits <- housing |>
   filter(permit_class %in% sf_housing)
 
 # Austin's housing stock by type 
-housing |> 
+by_type <- housing |> 
   group_by(permit_class) |> 
-  count(permit_type) |> # print() 
+  count(permit_type)  |> 
+  arrange(desc(n))
+
+by_type |> write_csv("4data-wrapper/housing_by_type.csv")
+
+
+by_type|> # print() 
   ggplot(aes(
     x = "", 
     y = n, 
@@ -735,16 +754,25 @@ sf_housing_permits |>
 
 ```{r}
 sf_housing_permits |> 
-  group_by(council_district, permit_class) |> 
-  count(permit_type) |> arrange(desc(n)) 
+  group_by(council_district) |> 
+  count(permit_type) |> 
+  arrange(desc(n)) 
 ```
 
 ```{r}
 sf_housing_permits |> 
-  group_by(original_zip, permit_class) |> 
-  count(permit_type) |> arrange(desc(n))
+  group_by(original_zip) |> 
+  count(permit_type) |> 
+  arrange(desc(n))
 ```
 
 ## Further Questions
 
 - Should we get within the last five/six years and make the maps for concentration since the pandemic?
+
+```{r}
+
+
+permits_clean |> str_detect()
+```
+

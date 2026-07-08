@@ -25,7 +25,7 @@ construction_times <- read_rds("data-export/project_length.rds")
 # I have a weird thing about naming things the same thing even if its a different notebook i will not be tamed
 ```
 
-Previously, this was a mess express. We are restarting with the Hearst way to geocode --> geocode.io (reportedly) (jk im using tidygeocoder)
+Previously, this was a mess express. We are restarting with the Hearst way to geocode --> geocode.io (reportedly)
 
 ## Cleaning for maps
 
@@ -102,5 +102,24 @@ df_for_geocoding |>
   group_split(gl(n(), chunk_size, length = n())) |>
   iwalk(\(chunk, i) write_csv(chunk, sprintf("data-export/chunk_%03d.csv", i)))
 
+```
+
+~ geocoding ~ 
+
+## Putting the chunks back together 
+
+I just downloaded them from the website and placed them in my data-raw folder.
+
+
+```{r}
+
+chunk1 <- read_csv("data-raw/geo_chunk1.csv") |> clean_names() |>
+  mutate(geocodio_house_number = as.character(geocodio_house_number))
+chunk2 <- read_csv("data-raw/geo_chunk2.csv") |> clean_names() |>
+  mutate(geocodio_house_number = as.character(geocodio_house_number))
+chunk3 <- read_csv("data-raw/geo_chunk3.csv") |> clean_names() |>
+  mutate(geocodio_house_number = as.character(geocodio_house_number))
+
+bind_rows(chunk1, chunk2, chunk3) |> write_csv("data-export/geo_housing.csv")
 ```
 

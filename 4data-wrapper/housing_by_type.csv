@@ -1,0 +1,7 @@
+permit_class,permit_type,n
+C- 101 Single Family Houses,BP,2194
+C- 103 Two Family Bldgs,BP,311
+C- 104 Three & Four Family Bldgs,BP,1161
+R- 101 Single Family Houses,BP,86371
+R- 102 Secondary Apartment,BP,3241
+R- 103 Two Family Bldgs,BP,3755
