@@ -18,9 +18,11 @@ library(ggplot2)
 
 ```{r}
 
-permits <- read_csv("data-raw/Issued_Construction_Permits_20260604.csv") 
+permits <- read_csv("data-raw/Issued_Construction_Permits_20260713.csv") 
 
 permits |> colnames()
+
+permits |> distinct(`Work Class`)
 
 permits_clean <- permits |> clean_names(
 ) |> 
@@ -28,7 +30,7 @@ permits_clean <- permits |> clean_names(
   select(permit_type, permit_num, permit_class_mapped, permit_class, work_class, condominium, project_name, description, tcad_id, issued_date,calendar_year_issued, fiscal_year_issued, status_current, expires_date, completed_date, council_district, housing_units,number_of_floors, total_job_valuation, original_zip, council_district, jurisdiction, link, project_id, master_permit_num,contractor_company_name,contractor_phone,contractor_zip, applicant_organization, applicant_phone, certificate_of_occupancy, original_address_1) |>  # KH: just grabbed the ones that seemed important
   filter(calendar_year_issued >= 1996) ## grabbing only thirty years
 
-permits_clean
+permits_clean 
 ```
 
 ## Determining Permit Class
@@ -66,8 +68,76 @@ housing <- permits_clean |>
   filter(permit_class %in% housing_types) 
 
 housing |> write_rds("data-export/housing_clean.rds") # need this for later
+```
 
-housing |> distinct(permit_class)
+## Getting rid of aborted projects
+
+Some projects did not get off the ground. We are making the decision to only consider active and final constructions. 
+
+```{r}
+canceled_projects <- housing |> filter(!status_current == "Final") |> #5,898 rows
+  filter(!status_current == "Active") |> 
+  distinct(status_current) |> 
+  pull()
+
+real_houses <- 
+  housing |> filter(!status_current%in%canceled_projects)
+```
+## Getting rid of Not housing
+
+NOTE: This section occurred towards the end of the process. If it feels like it is ahead of itself, that is because it sorta
+
+```{r}
+
+multifam <- c("C- 104 Three & Four Family Bldgs", "C- 105 Five or More Family Bldgs", "C- 103 Two Family Bldgs") 
+
+multifams <- real_houses |> 
+  filter(permit_class %in% multifam)
+
+multifams |> 
+  filter(is.na(housing_units)) |>
+  write_csv("data-checks/multifam_na.csv") # this one was true, only need to fix two rows
+
+not_housing_also <- 
+  multifams |> 
+  filter(is.na(housing_units)) |>
+  filter(!permit_num=="1999-015531 BP") |> 
+  filter(!permit_num=="2000-005066 BP") |> 
+  pull(tcad_id)
+
+sf_housing <- c("C- 101 Single Family Houses",
+"R- 101 Single Family Houses")
+
+sf_housing_permits <- real_houses |> 
+  filter(permit_class %in% sf_housing)
+
+sf_housing_permits |> filter(is.na(housing_units)) |> 
+  write_csv("data-checks/singlefam_na.csv")# 10,305 rows, still includes housing??
+  
+```
+
+For multifamily housing, we only need to fixed five of the 23 rows. For single family its more crazy... 
+
+After I loaded my bad single rows into sheets, I scanned through for sample keywords that signal housing. Here is the list I found: 
+- "Story"
+- "Sty"
+- "Stry"
+- "Residence"
+- "Condo" 
+
+The primary culprit seems to be pools. At first I thought we could filter out pools but we run into the garage problem again. So, after I filtered for those words, I started to systemtically guess-n-check for more words I could be missing, going through the results and pulling more words. 
+
+Yes, I could have used AI for this but we need to be careful. After I get this approved, I will be pulling their tcads and filtering those out of our original data. (Also moving some things around so everything works currently)
+
+```{r}
+keywords <- c("Story", "Sty", "Stry", "Residence", "Condo", "W/Attached Garage", "Secondary Apartment", "Secondary Apt", "Residential", "Duplex", "New Sf Res","New Single", "New Two", "manufactured", "Manufacutred", "New Group Home W/5 Bedrooms", "New One", "Sf Res. W/Attched Garage Covered Porch & Uncovered Patio")
+
+not_housing <- sf_housing_permits |> filter(is.na(housing_units)) |> 
+  filter(!str_detect(description, regex(str_c(keywords, collapse = "|"), ignore_case = TRUE))) |> pull(tcad_id)
+
+really_real_houses <- real_houses |> 
+  filter(!tcad_id%in%not_housing) |> 
+  filter(!tcad_id%in%not_housing_also)
 ```
 
 ## Overview
@@ -75,7 +145,7 @@ housing |> distinct(permit_class)
 ### Housing Permits Issued per year 
 
 ```{r}
-per_year <- housing |> 
+per_year <- really_real_houses |> 
   group_by(calendar_year_issued) |> # Travis prefers calendar year over fiscal year
   count(permit_type) |> 
   filter(!calendar_year_issued==2026)
@@ -104,7 +174,7 @@ per_year |> write_csv("4data-wrapper/permits_per_year.csv")
 After speaking with Robbie Searcy from Austin Development Services, we determined that the best way to find how long a project is we would need to compare the "issued date" with the "completed date." However, there is one note that the certificate of occupancy "is provided to the applicant after the construction work has been completed and passed all required inspections." But this column in the data set does not have a date associated with it, so I will just heed Searcy's advice here. 
 
 ```{r}
-construction_time <- housing |> 
+construction_time <- really_real_houses |> 
   select(project_name, issued_date, completed_date, jurisdiction, original_address_1, applicant_organization, project_id, calendar_year_issued, permit_class, council_district, original_zip, housing_units) |> 
   mutate(project_length = 
            as.numeric(difftime(completed_date, issued_date, units = "weeks"))) |> 
@@ -174,7 +244,7 @@ One of the main questions is where are most of the building permits getting issu
 cols <- c("1"="#E69F00","2"="#56B4E9","3"="#009E73","4"="#F0E442","5"="#0072B2",
           "6"="#D55E00","7"="#CC79A7","8"="#000000","9"="red4","10"="#44AA99")
 
-districts <- housing |>
+districts <- really_real_houses |>
   mutate(council_district = as.factor(council_district)) |> 
   group_by(calendar_year_issued, council_district) |>
   count(permit_type) 
@@ -207,7 +277,7 @@ district_concentration <- districts |>
 
 districts |> filter(council_district == "1")
 
-# KH: District 1 takes the cake on permits issuesd at 17,283 construction permits. 
+# KH: District 1 takes the cake on permits issuesd at 16284 construction permits. D2 15486
 ```
 
 ### District 1
@@ -324,6 +394,9 @@ districts |>
     y = "New Construction Permits", 
     x = "Year"
   )
+
+districts |> filter(council_district == "7") |> 
+  arrange(desc(n))
 ```
 ### District 8
 ```{r}
@@ -388,7 +461,7 @@ time_district <- construction_time |>
   group_by(calendar_year_issued, council_district) |>
   summarize("avg_time" = mean(project_length), .groups = "drop")
   
-time_district |> print()
+time_district
 ```
 
 
@@ -487,7 +560,7 @@ ZIP codes get a little more specific than districts. Getting general ideas from 
 
 #KH: number of permits issued per year
 zips_permits <- 
-  housing |> 
+  really_real_houses |> 
   group_by(calendar_year_issued, original_zip) |> 
   count(permit_type) # |> print() 
 
@@ -566,26 +639,9 @@ bind_rows(since_2006, since_2016, since_2019) |> filter()
 
 ```
 
-
-### East Riverside
-
-[Going through major developments](https://www.statesman.com/news/article/austin-east-riverside-light-rail-21333956.php), zipcode 78741 --> checking their housing
-
-```{r}
-housing |> 
-  filter(original_zip == 78741) |> 
-  group_by(calendar_year_issued) |> 
-  count(permit_type) |> 
-  ggplot(aes(
-    x = calendar_year_issued, 
-    y = n
-  )) + geom_point() + geom_line() + 
-  labs(
-    title = "Building permits issued in East Riverside"
-  )
-```
-
 ## Multi-family Housing
+
+NOTE: DATA FRAME FOR THE FOLLOWING TWO SECTIONS WERE CREATED IN "Getting rid of Not housing" PLEASE ADVISE
 
 C- 104 Three & Four Family Bldgs
 C- 105 Five or More Family Bldgs
@@ -596,29 +652,23 @@ C- 105 Five or More Family Bldgs
 3. Track how long its taking to get them up. 
 
 ```{r}
-
-multifam <- c("C- 104 Three & Four Family Bldgs", "C- 105 Five or More Family Bldgs") 
-
-multifams <- housing |> 
-  filter(permit_class %in% multifam)
-
 multifams |> 
   summarise("total_units" = sum(as.numeric(housing_units), na.rm = TRUE))
-
-housing |> summarise("total_units" = sum(as.numeric(housing_units), na.rm = TRUE)) #93,529
-
-housing |> filter(!housing_units>=1) # KH: DOUBLE CHECK NA ROWS
-# KH: what I bet it is --> not a required field on construction permit
 ```
 
-Since 1996, there has been 1,161 permits for multifamily developments with more than housing units per project in the city of Austin, representing about 5,377 housing units.
+Since 1996, there has been 1,223 permits for multifamily developments with more than housing units per project in the city of Austin, representing about 5,367 housing units.
 
 ### Permits Issued per Year
 
 ```{r}
-multifams |> 
+multi_times <- multifams |> 
   group_by(calendar_year_issued) |>
-  count(permit_type) |>
+  count(permit_type)
+
+multi_times |> 
+  arrange(desc(n))
+
+multi_times|>
   ggplot(
     aes(
       x = calendar_year_issued, 
@@ -663,7 +713,7 @@ MF_project_length |>
   summarize("median_time" = median(project_length)) |> 
   print()
 
-# takes about 81.4 weeks on average to get a highrise up, about 60 weeks is the middle number or another kind of average.
+# takes about 85.8 weeks on average to get a highrise up, about 63.4 weeks is the middle number or another kind of average.
 ```
 
 ### By district, ZIP
@@ -681,9 +731,7 @@ multifams |>
 multifams |> 
   group_by(original_zip) |> 
   count(permit_type) |> 
-  arrange(desc(n)) 
-
-|> 
+  arrange(desc(n)) |> 
   print()
 ```
 
@@ -697,15 +745,8 @@ R- 101 Single Family Houses
 ### Overall
 
 ```{r}
-# Creating SF data frame
-sf_housing <- c("C- 101 Single Family Houses",
-"R- 101 Single Family Houses")
-
-sf_housing_permits <- housing |> 
-  filter(permit_class %in% sf_housing)
-
 # Austin's housing stock by type 
-by_type <- housing |> 
+by_type <- really_real_houses |> 
   group_by(permit_class) |> 
   count(permit_type)  |> 
   arrange(desc(n))
@@ -766,13 +807,56 @@ sf_housing_permits |>
   arrange(desc(n))
 ```
 
-## Further Questions
+## Misc Findings
+
+### Finding addresses for Photo
 
 - Should we get within the last five/six years and make the maps for concentration since the pandemic?
 
 ```{r}
-
-
-permits_clean |> str_detect()
+housing |> filter(original_zip==78748) |> 
+  arrange(desc(calendar_year_issued)) |> 
+  filter(status_current=="Final")
 ```
 
+### Top Contractors (just curious)
+
+```{r}
+housing |> group_by(contractor_company_name) |> 
+  count(contractor_company_name) |> 
+  arrange(desc(n))|> 
+  head(21) |> 
+  write_csv("data-export/top_contractors.csv")
+
+```
+
+### Average Multifamily unit number
+
+```{r}
+multifams |> 
+  count(permit_type)
+# 1223 projects
+
+multifams |> drop_na(housing_units) |> # dropped 23 projects
+  summarise("avg" = mean(housing_units)) # using average bc I want to weigh outliers
+
+```
+
+
+### East Riverside
+
+[Going through major developments](https://www.statesman.com/news/article/austin-east-riverside-light-rail-21333956.php), zipcode 78741 --> checking their housing
+
+```{r}
+real_houses |> 
+  filter(original_zip == 78741) |> 
+  group_by(calendar_year_issued) |> 
+  count(permit_type) |> 
+  ggplot(aes(
+    x = calendar_year_issued, 
+    y = n
+  )) + geom_point() + geom_line() + 
+  labs(
+    title = "Building permits issued in East Riverside"
+  )
+```
