@@ -85,7 +85,7 @@ real_houses <-
 ```
 ## Getting rid of Not housing
 
-NOTE: This section occurred towards the end of the process. If it feels like it is ahead of itself, that is because it sorta
+NOTE: This section occurred towards the end of the process. If it feels like it is ahead of itself, that is because it sorta is
 
 ```{r}
 
@@ -150,7 +150,7 @@ per_year <- really_real_houses |>
   count(permit_type) |> 
   filter(!calendar_year_issued==2026)
 
-per_year |> write_csv("4data-wrapper/permits_per_year.csv")
+per_year |> write_csv("4data-wrapper/permits_per_year_2.csv")
 # KH: dropping 2026 since this year isn't done
 ```
 
@@ -751,7 +751,7 @@ by_type <- really_real_houses |>
   count(permit_type)  |> 
   arrange(desc(n))
 
-by_type |> write_csv("4data-wrapper/housing_by_type.csv")
+by_type |> write_csv("4data-wrapper/housing_by_type_2.csv")
 
 
 by_type|> # print() 
