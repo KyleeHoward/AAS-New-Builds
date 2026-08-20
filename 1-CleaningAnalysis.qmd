@@ -18,7 +18,7 @@ library(ggplot2)
 
 ```{r}
 
-permits <- read_csv("data-raw/Issued_Construction_Permits_20260713.csv") 
+permits <- read_csv("data-raw/Issued_Construction_Permits_20260811.csv") 
 
 permits |> colnames()
 
@@ -597,9 +597,11 @@ district_duration <-
 
 ```{r}
 zips_concentration |>
-  filter(total >= 3000) |> 
+  filter(total >= 2500) |> 
   arrange(desc(total)) |> 
   print()
+
+
 ```
 In the last thirty years, the city of Austin sprawled, with a majority of the ZIP codes in the top development hot spots being in Austin's subrubs, with the expection of 78723 (Mueller) and 78702 (Riverside). 
 
@@ -653,7 +655,10 @@ C- 105 Five or More Family Bldgs
 
 ```{r}
 multifams |> 
-  summarise("total_units" = sum(as.numeric(housing_units), na.rm = TRUE))
+  summarise("total_units" = sum(as.numeric(housing_units), na.rm = TRUE)) 
+
+multifams|> 
+  summarise("avg_units"= mean(as.numeric(housing_units), na.rm = TRUE))
 ```
 
 Since 1996, there has been 1,223 permits for multifamily developments with more than housing units per project in the city of Austin, representing about 5,367 housing units.
